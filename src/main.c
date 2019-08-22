@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <main.h>
 
 static int success = 0;
 static GLFWwindow* window;
@@ -12,12 +13,34 @@ static int shader = 0;
 static char info[512];
 static char *source = NULL;
 static unsigned int vao, vbo;
+static float deltaTime = 0.0f;
+static float lastFrame = 0.0f;
+static float size = 25.0f;
+
+static mat4x4 model;
+static mat4x4 view;
+static mat4x4 projection;
+
+void program_set_color_3f(float r, float g, float b) 
+{
+  glUniform3f(glGetUniformLocation(program, "color"), r, g, b);
+}
 
 static void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods) 
 {
 
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
     glfwSetWindowShouldClose(window, GLFW_TRUE);
+  }
+
+  if (key == GLFW_KEY_UP && action == GLFW_PRESS) {
+    snake_set_direction(SNAKE_DIRECTION_UP);
+  } else if (key == GLFW_KEY_DOWN && action == GLFW_PRESS) {
+    snake_set_direction(SNAKE_DIRECTION_DOWN);
+  } else if (key == GLFW_KEY_LEFT && action == GLFW_PRESS) {
+    snake_set_direction(SNAKE_DIRECTION_LEFT);
+  } else if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS) {
+    snake_set_direction(SNAKE_DIRECTION_RIGHT);
   }
 
 }
@@ -71,6 +94,19 @@ static char *load_source(const char *path)
   fclose(fp);
 
   return source;
+}
+
+void draw_rect(int x, int y) {
+
+  mat4x4_identity(model);
+
+  glBindVertexArray(vao);
+
+  mat4x4_translate(model, x * 25, y * 25, 0.0f);
+  glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, (const float *)model);
+
+  glDrawArrays(GL_TRIANGLES, 0, 6);
+
 }
 
 int main(int argc, char *argv[])
@@ -157,10 +193,15 @@ int main(int argc, char *argv[])
 
   /* set up vertex data */
 
+  float space = 1.0f;
+
   float vertices[] = {
-    -0.5f, -0.5f, -0.0f,
-    +0.5f, -0.5f, -0.0f,
-    +0.0f, +0.5f, -0.0f,
+    space, space, 0.0f,
+    size-space, space, 0.0f,
+    size-space, size-space, 0.0f,
+    size-space, size-space, 0.0f,
+    space, size-space, 0.0f,
+    space, space, 0.0f,
   };
 
   /* generate vertex array */
@@ -180,21 +221,52 @@ int main(int argc, char *argv[])
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
 
+  /* load identity matrices */
+  mat4x4_identity(model);
+  mat4x4_identity(view);
+  mat4x4_identity(projection);
+
   /* set context clear color */
   glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+
+  snake_main();
+  apple_main();
 
   /* the main loop */
   while (!glfwWindowShouldClose(window))
   {
+
+    float time = glfwGetTime();
+    float currentFrame = glfwGetTime();
+
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    /*printf("Delta: %f.\n", deltaTime);*/
+    /*printf("Time: %f\n", time);*/
 
     /* clear the color buffer */
     glClear(GL_COLOR_BUFFER_BIT);
 
     /* draw */
     glUseProgram(program);
+
+    glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, (const float *)view);
+    mat4x4_ortho(projection, 0.0f, 800.0f, 0.0f, 600.0f, -1.0f, 1.0f);
+    glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE, (const float *)projection);
+
     glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glUseProgram(0);
+
+    static float step = 100.0f;
+    static float nextTime = 0.0f;
+
+    if (time*1000 > nextTime) {
+      snake_update();
+      nextTime += step;
+    }
+
+    snake_loop();
+    apple_loop();
 
     /* swap the buffers */
     glfwSwapBuffers(window);
